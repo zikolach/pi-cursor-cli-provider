@@ -21,13 +21,8 @@ const REASONING_LEVELS = [
     "max",
 ] as const satisfies readonly ThinkingLevel[];
 
-/**
- * Static fallback list. Used when `agent models` fails or times out, and as
- * an attribute lookup table for models discovered dynamically.
- *
- * Source: `agent models` output (Cursor CLI v2026.06.15)
- */
-export const STATIC_MODELS: CursorModelDef[] = [
+/** Known context and output limits retained across model-list updates. */
+const STATIC_MODEL_METADATA: CursorModelDef[] = [
     {
         id: "auto",
         name: "Auto",
@@ -779,6 +774,191 @@ export const STATIC_MODELS: CursorModelDef[] = [
     },
 ];
 
+/**
+ * Static fallback list. Used when `agent models` fails or times out, and as
+ * an attribute lookup table for models discovered dynamically.
+ *
+ * Source: `agent models` output (Cursor CLI v2026.08.04-aaa8809)
+ */
+const STATIC_MODEL_ENTRIES = [
+    ["auto", "Auto"],
+    ["gpt-5.3-codex-low", "Codex 5.3 Low"],
+    ["gpt-5.3-codex-low-fast", "Codex 5.3 Low Fast"],
+    ["gpt-5.3-codex", "Codex 5.3"],
+    ["gpt-5.3-codex-fast", "Codex 5.3 Fast"],
+    ["gpt-5.3-codex-high", "Codex 5.3 High"],
+    ["gpt-5.3-codex-high-fast", "Codex 5.3 High Fast"],
+    ["gpt-5.3-codex-xhigh", "Codex 5.3 Extra High"],
+    ["gpt-5.3-codex-xhigh-fast", "Codex 5.3 Extra High Fast"],
+    ["gpt-5.2", "GPT-5.2"],
+    ["cursor-grok-4.5-high", "Cursor Grok 4.5"],
+    ["cursor-grok-4.5-high-fast", "Cursor Grok 4.5 Fast"],
+    ["composer-2.5", "Composer 2.5"],
+    ["claude-opus-5-thinking-high", "Opus 5 1M Thinking"],
+    ["claude-opus-5-thinking-high-fast", "Opus 5 1M Thinking Fast"],
+    ["claude-opus-5-thinking-xhigh", "Opus 5 1M Extra High Thinking"],
+    ["claude-opus-5-thinking-xhigh-fast", "Opus 5 1M Extra High Thinking Fast"],
+    ["claude-opus-4-8-thinking-high", "Opus 4.8 1M Thinking"],
+    ["gpt-5.6-sol-high", "GPT-5.6 Sol 1M High"],
+    ["gpt-5.6-sol-high-fast", "GPT-5.6 Sol High Fast"],
+    ["gpt-5.6-sol-xhigh", "GPT-5.6 Sol 1M Extra High"],
+    ["gpt-5.6-sol-xhigh-fast", "GPT-5.6 Sol Extra High Fast"],
+    ["gpt-5.5-high", "GPT-5.5 1M High"],
+    ["gpt-5.5-high-fast", "GPT-5.5 High Fast"],
+    ["claude-sonnet-5-thinking-high", "Sonnet 5 1M Thinking"],
+    ["claude-sonnet-5-thinking-xhigh", "Sonnet 5 1M Extra High Thinking"],
+    ["kimi-k3-high", "Kimi K3 High"],
+    ["cursor-grok-4.5-low", "Cursor Grok 4.5 Low"],
+    ["cursor-grok-4.5-low-fast", "Cursor Grok 4.5 Low Fast"],
+    ["cursor-grok-4.5-medium", "Cursor Grok 4.5 Medium"],
+    ["cursor-grok-4.5-medium-fast", "Cursor Grok 4.5 Medium Fast"],
+    ["composer-2.5-fast", "Composer 2.5 Fast"],
+    ["claude-opus-5-low", "Opus 5 1M Low"],
+    ["claude-opus-5-low-fast", "Opus 5 1M Low Fast"],
+    ["claude-opus-5-medium", "Opus 5 1M Medium"],
+    ["claude-opus-5-medium-fast", "Opus 5 1M Medium Fast"],
+    ["claude-opus-5-high", "Opus 5 1M"],
+    ["claude-opus-5-high-fast", "Opus 5 1M Fast"],
+    ["claude-opus-5-thinking-low", "Opus 5 1M Low Thinking"],
+    ["claude-opus-5-thinking-low-fast", "Opus 5 1M Low Thinking Fast"],
+    ["claude-opus-5-thinking-medium", "Opus 5 1M Medium Thinking"],
+    ["claude-opus-5-thinking-medium-fast", "Opus 5 1M Medium Thinking Fast"],
+    ["claude-opus-5-thinking-max", "Opus 5 1M Max Thinking"],
+    ["claude-opus-5-thinking-max-fast", "Opus 5 1M Max Thinking Fast"],
+    ["claude-opus-4-8-low", "Opus 4.8 1M Low"],
+    ["claude-opus-4-8-medium", "Opus 4.8 1M Medium"],
+    ["claude-opus-4-8-high", "Opus 4.8 1M"],
+    ["claude-opus-4-8-xhigh", "Opus 4.8 1M Extra High"],
+    ["claude-opus-4-8-max", "Opus 4.8 1M Max"],
+    ["claude-opus-4-8-thinking-low", "Opus 4.8 1M Low Thinking"],
+    ["claude-opus-4-8-thinking-medium", "Opus 4.8 1M Medium Thinking"],
+    ["claude-opus-4-8-thinking-xhigh", "Opus 4.8 1M Extra High Thinking"],
+    ["claude-opus-4-8-thinking-max", "Opus 4.8 1M Max Thinking"],
+    ["gpt-5.6-sol-none", "GPT-5.6 Sol 1M None"],
+    ["gpt-5.6-sol-none-fast", "GPT-5.6 Sol None Fast"],
+    ["gpt-5.6-sol-low", "GPT-5.6 Sol 1M Low"],
+    ["gpt-5.6-sol-low-fast", "GPT-5.6 Sol Low Fast"],
+    ["gpt-5.6-sol-medium", "GPT-5.6 Sol 1M"],
+    ["gpt-5.6-sol-medium-fast", "GPT-5.6 Sol Fast"],
+    ["gpt-5.6-sol-max", "GPT-5.6 Sol 1M Max"],
+    ["gpt-5.6-sol-max-fast", "GPT-5.6 Sol Max Fast"],
+    ["gpt-5.5-none", "GPT-5.5 1M None"],
+    ["gpt-5.5-none-fast", "GPT-5.5 None Fast"],
+    ["gpt-5.5-low", "GPT-5.5 1M Low"],
+    ["gpt-5.5-low-fast", "GPT-5.5 Low Fast"],
+    ["gpt-5.5-medium", "GPT-5.5 1M"],
+    ["gpt-5.5-medium-fast", "GPT-5.5 Fast"],
+    ["gpt-5.5-extra-high", "GPT-5.5 1M Extra High"],
+    ["gpt-5.5-extra-high-fast", "GPT-5.5 Extra High Fast"],
+    ["claude-sonnet-5-low", "Sonnet 5 1M Low"],
+    ["claude-sonnet-5-medium", "Sonnet 5 1M Medium"],
+    ["claude-sonnet-5-high", "Sonnet 5 1M"],
+    ["claude-sonnet-5-xhigh", "Sonnet 5 1M Extra High"],
+    ["claude-sonnet-5-max", "Sonnet 5 1M Max"],
+    ["claude-sonnet-5-thinking-low", "Sonnet 5 1M Low Thinking"],
+    ["claude-sonnet-5-thinking-medium", "Sonnet 5 1M Medium Thinking"],
+    ["claude-sonnet-5-thinking-max", "Sonnet 5 1M Max Thinking"],
+    ["gpt-5.6-terra-none", "GPT-5.6 Terra 1M None"],
+    ["gpt-5.6-terra-none-fast", "GPT-5.6 Terra None Fast"],
+    ["gpt-5.6-terra-low", "GPT-5.6 Terra 1M Low"],
+    ["gpt-5.6-terra-low-fast", "GPT-5.6 Terra Low Fast"],
+    ["gpt-5.6-terra-medium", "GPT-5.6 Terra 1M"],
+    ["gpt-5.6-terra-medium-fast", "GPT-5.6 Terra Fast"],
+    ["gpt-5.6-terra-high", "GPT-5.6 Terra 1M High"],
+    ["gpt-5.6-terra-high-fast", "GPT-5.6 Terra High Fast"],
+    ["gpt-5.6-terra-xhigh", "GPT-5.6 Terra 1M Extra High"],
+    ["gpt-5.6-terra-xhigh-fast", "GPT-5.6 Terra Extra High Fast"],
+    ["gpt-5.6-terra-max", "GPT-5.6 Terra 1M Max"],
+    ["gpt-5.6-terra-max-fast", "GPT-5.6 Terra Max Fast"],
+    ["claude-4.6-sonnet-medium", "Sonnet 4.6 1M"],
+    ["claude-4.6-sonnet-medium-thinking", "Sonnet 4.6 1M Thinking"],
+    ["claude-opus-4-7-low", "Opus 4.7 1M Low"],
+    ["claude-opus-4-7-medium", "Opus 4.7 1M Medium"],
+    ["claude-opus-4-7-high", "Opus 4.7 1M High"],
+    ["claude-opus-4-7-xhigh", "Opus 4.7 1M"],
+    ["claude-opus-4-7-max", "Opus 4.7 1M Max"],
+    ["claude-opus-4-7-thinking-low", "Opus 4.7 1M Low Thinking"],
+    ["claude-opus-4-7-thinking-medium", "Opus 4.7 1M Medium Thinking"],
+    ["claude-opus-4-7-thinking-high", "Opus 4.7 1M High Thinking"],
+    ["claude-opus-4-7-thinking-xhigh", "Opus 4.7 1M Thinking"],
+    ["claude-opus-4-7-thinking-max", "Opus 4.7 1M Max Thinking"],
+    ["gpt-5.4-low", "GPT-5.4 1M Low"],
+    ["gpt-5.4-medium", "GPT-5.4 1M"],
+    ["gpt-5.4-medium-fast", "GPT-5.4 Fast"],
+    ["gpt-5.4-high", "GPT-5.4 1M High"],
+    ["gpt-5.4-high-fast", "GPT-5.4 High Fast"],
+    ["gpt-5.4-xhigh", "GPT-5.4 1M Extra High"],
+    ["gpt-5.4-xhigh-fast", "GPT-5.4 Extra High Fast"],
+    ["claude-4.6-opus-high", "Opus 4.6 1M"],
+    ["claude-4.6-opus-max", "Opus 4.6 1M Max"],
+    ["claude-4.6-opus-high-thinking", "Opus 4.6 1M Thinking"],
+    ["claude-4.6-opus-max-thinking", "Opus 4.6 1M Max Thinking"],
+    ["claude-4.5-opus-high", "Opus 4.5"],
+    ["claude-4.5-opus-high-thinking", "Opus 4.5 Thinking"],
+    ["gpt-5.2-low", "GPT-5.2 Low"],
+    ["gpt-5.2-low-fast", "GPT-5.2 Low Fast"],
+    ["gpt-5.2-fast", "GPT-5.2 Fast"],
+    ["gpt-5.2-high", "GPT-5.2 High"],
+    ["gpt-5.2-high-fast", "GPT-5.2 High Fast"],
+    ["gpt-5.2-xhigh", "GPT-5.2 Extra High"],
+    ["gpt-5.2-xhigh-fast", "GPT-5.2 Extra High Fast"],
+    ["gpt-5.6-luna-none", "GPT-5.6 Luna 1M None"],
+    ["gpt-5.6-luna-none-fast", "GPT-5.6 Luna None Fast"],
+    ["gpt-5.6-luna-low", "GPT-5.6 Luna 1M Low"],
+    ["gpt-5.6-luna-low-fast", "GPT-5.6 Luna Low Fast"],
+    ["gpt-5.6-luna-medium", "GPT-5.6 Luna 1M"],
+    ["gpt-5.6-luna-medium-fast", "GPT-5.6 Luna Fast"],
+    ["gpt-5.6-luna-high", "GPT-5.6 Luna 1M High"],
+    ["gpt-5.6-luna-high-fast", "GPT-5.6 Luna High Fast"],
+    ["gpt-5.6-luna-xhigh", "GPT-5.6 Luna 1M Extra High"],
+    ["gpt-5.6-luna-xhigh-fast", "GPT-5.6 Luna Extra High Fast"],
+    ["gpt-5.6-luna-max", "GPT-5.6 Luna 1M Max"],
+    ["gpt-5.6-luna-max-fast", "GPT-5.6 Luna Max Fast"],
+    ["gemini-3.6-flash-minimal", "Gemini 3.6 Flash Minimal"],
+    ["gemini-3.6-flash-low", "Gemini 3.6 Flash Low"],
+    ["gemini-3.6-flash-medium", "Gemini 3.6 Flash Medium"],
+    ["gemini-3.6-flash-high", "Gemini 3.6 Flash"],
+    ["gemini-3.1-pro", "Gemini 3.1 Pro"],
+    ["gpt-5.4-mini-none", "GPT-5.4 Mini None"],
+    ["gpt-5.4-mini-low", "GPT-5.4 Mini Low"],
+    ["gpt-5.4-mini-medium", "GPT-5.4 Mini"],
+    ["gpt-5.4-mini-high", "GPT-5.4 Mini High"],
+    ["gpt-5.4-mini-xhigh", "GPT-5.4 Mini Extra High"],
+    ["gpt-5.4-nano-none", "GPT-5.4 Nano None"],
+    ["gpt-5.4-nano-low", "GPT-5.4 Nano Low"],
+    ["gpt-5.4-nano-medium", "GPT-5.4 Nano"],
+    ["gpt-5.4-nano-high", "GPT-5.4 Nano High"],
+    ["gpt-5.4-nano-xhigh", "GPT-5.4 Nano Extra High"],
+    ["claude-4.5-sonnet", "Sonnet 4.5"],
+    ["claude-4.5-sonnet-thinking", "Sonnet 4.5 Thinking"],
+    ["gpt-5.1-low", "GPT-5.1 Low"],
+    ["gpt-5.1", "GPT-5.1"],
+    ["gpt-5.1-high", "GPT-5.1 High"],
+    ["gemini-3-flash", "Gemini 3 Flash"],
+    ["gemini-3.5-flash", "Gemini 3.5 Flash"],
+    ["claude-4-sonnet", "Sonnet 4"],
+    ["claude-4-sonnet-thinking", "Sonnet 4 Thinking"],
+    ["gpt-5-mini", "GPT-5 Mini"],
+    ["kimi-k3-low", "Kimi K3 Low"],
+    ["kimi-k3-max", "Kimi K3"],
+    ["kimi-k2.7-code", "Kimi K2.7 Code"],
+] as const;
+
+const STATIC_MODEL_METADATA_MAP = new Map(STATIC_MODEL_METADATA.map((model) => [model.id, model]));
+
+export const STATIC_MODELS: CursorModelDef[] = STATIC_MODEL_ENTRIES.map(([id, name]) => {
+    const known = STATIC_MODEL_METADATA_MAP.get(id);
+    if (known) return { ...known, name };
+
+    return {
+        id,
+        name,
+        reasoning: THINKING_VARIANT_RE.test(id),
+        contextWindow: name.includes("1M") ? 1000000 : 200000,
+        maxTokens: id.startsWith("claude") ? 32000 : id.startsWith("gemini") ? 65536 : 32768,
+    };
+});
+
 interface ModelVariants {
     default: string;
     minimal?: string;
@@ -789,16 +969,18 @@ interface ModelVariants {
     max?: string;
 }
 
-function opusThinkingVariants(version: "4-7" | "4-8"): ModelVariants {
+function opusThinkingVariants(version: "4-7" | "4-8" | "5", fast = false): ModelVariants {
     const prefix = `claude-opus-${version}`;
+    const suffix = fast ? "-fast" : "";
+    const defaultLevel = version === "5" ? "high" : "xhigh";
     return {
-        default: `${prefix}-xhigh`,
-        minimal: `${prefix}-thinking-low`,
-        low: `${prefix}-thinking-low`,
-        medium: `${prefix}-thinking-medium`,
-        high: `${prefix}-thinking-high`,
-        xhigh: `${prefix}-thinking-xhigh`,
-        max: `${prefix}-thinking-max`,
+        default: `${prefix}-${defaultLevel}${suffix}`,
+        minimal: `${prefix}-thinking-low${suffix}`,
+        low: `${prefix}-thinking-low${suffix}`,
+        medium: `${prefix}-thinking-medium${suffix}`,
+        high: `${prefix}-thinking-high${suffix}`,
+        xhigh: `${prefix}-thinking-xhigh${suffix}`,
+        max: `${prefix}-thinking-max${suffix}`,
     };
 }
 
@@ -885,6 +1067,17 @@ const MODEL_MAP: Record<string, ModelVariants> = {
     },
     "claude-opus-4-7": opusThinkingVariants("4-7"),
     "claude-opus-4-8": opusThinkingVariants("4-8"),
+    "claude-opus-5": opusThinkingVariants("5"),
+    "claude-opus-5-fast": opusThinkingVariants("5", true),
+    "claude-sonnet-5": {
+        default: "claude-sonnet-5-high",
+        minimal: "claude-sonnet-5-thinking-low",
+        low: "claude-sonnet-5-thinking-low",
+        medium: "claude-sonnet-5-thinking-medium",
+        high: "claude-sonnet-5-thinking-high",
+        xhigh: "claude-sonnet-5-thinking-xhigh",
+        max: "claude-sonnet-5-thinking-max",
+    },
     "gpt-5.1": {
         default: "gpt-5.1",
         minimal: "gpt-5.1-low",
@@ -997,6 +1190,60 @@ const MODEL_MAP: Record<string, ModelVariants> = {
         high: "gpt-5.5-high-fast",
         xhigh: "gpt-5.5-extra-high-fast",
     },
+    "gpt-5.6-sol": {
+        default: "gpt-5.6-sol-medium",
+        minimal: "gpt-5.6-sol-low",
+        low: "gpt-5.6-sol-low",
+        medium: "gpt-5.6-sol-medium",
+        high: "gpt-5.6-sol-high",
+        xhigh: "gpt-5.6-sol-xhigh",
+        max: "gpt-5.6-sol-max",
+    },
+    "gpt-5.6-sol-fast": {
+        default: "gpt-5.6-sol-medium-fast",
+        minimal: "gpt-5.6-sol-low-fast",
+        low: "gpt-5.6-sol-low-fast",
+        medium: "gpt-5.6-sol-medium-fast",
+        high: "gpt-5.6-sol-high-fast",
+        xhigh: "gpt-5.6-sol-xhigh-fast",
+        max: "gpt-5.6-sol-max-fast",
+    },
+    "gpt-5.6-terra": {
+        default: "gpt-5.6-terra-medium",
+        minimal: "gpt-5.6-terra-low",
+        low: "gpt-5.6-terra-low",
+        medium: "gpt-5.6-terra-medium",
+        high: "gpt-5.6-terra-high",
+        xhigh: "gpt-5.6-terra-xhigh",
+        max: "gpt-5.6-terra-max",
+    },
+    "gpt-5.6-terra-fast": {
+        default: "gpt-5.6-terra-medium-fast",
+        minimal: "gpt-5.6-terra-low-fast",
+        low: "gpt-5.6-terra-low-fast",
+        medium: "gpt-5.6-terra-medium-fast",
+        high: "gpt-5.6-terra-high-fast",
+        xhigh: "gpt-5.6-terra-xhigh-fast",
+        max: "gpt-5.6-terra-max-fast",
+    },
+    "gpt-5.6-luna": {
+        default: "gpt-5.6-luna-medium",
+        minimal: "gpt-5.6-luna-low",
+        low: "gpt-5.6-luna-low",
+        medium: "gpt-5.6-luna-medium",
+        high: "gpt-5.6-luna-high",
+        xhigh: "gpt-5.6-luna-xhigh",
+        max: "gpt-5.6-luna-max",
+    },
+    "gpt-5.6-luna-fast": {
+        default: "gpt-5.6-luna-medium-fast",
+        minimal: "gpt-5.6-luna-low-fast",
+        low: "gpt-5.6-luna-low-fast",
+        medium: "gpt-5.6-luna-medium-fast",
+        high: "gpt-5.6-luna-high-fast",
+        xhigh: "gpt-5.6-luna-xhigh-fast",
+        max: "gpt-5.6-luna-max-fast",
+    },
     "gpt-5.4-fast": {
         default: "gpt-5.4-medium-fast",
         minimal: "gpt-5.4-medium-fast",
@@ -1026,6 +1273,27 @@ const MODEL_MAP: Record<string, ModelVariants> = {
     "gemini-3.1-pro-preview": { default: "gemini-3.1-pro" },
     "gemini-3-flash-preview": { default: "gemini-3-flash" },
     "gemini-3.5-flash": { default: "gemini-3.5-flash" },
+    "gemini-3.6-flash": {
+        default: "gemini-3.6-flash-high",
+        minimal: "gemini-3.6-flash-minimal",
+        low: "gemini-3.6-flash-low",
+        medium: "gemini-3.6-flash-medium",
+        high: "gemini-3.6-flash-high",
+    },
+    "cursor-grok-4.5": {
+        default: "cursor-grok-4.5-high",
+        minimal: "cursor-grok-4.5-low",
+        low: "cursor-grok-4.5-low",
+        medium: "cursor-grok-4.5-medium",
+        high: "cursor-grok-4.5-high",
+    },
+    "cursor-grok-4.5-fast": {
+        default: "cursor-grok-4.5-high-fast",
+        minimal: "cursor-grok-4.5-low-fast",
+        low: "cursor-grok-4.5-low-fast",
+        medium: "cursor-grok-4.5-medium-fast",
+        high: "cursor-grok-4.5-high-fast",
+    },
     grok: {
         default: "grok-4.3",
     },
@@ -1037,6 +1305,12 @@ const MODEL_MAP: Record<string, ModelVariants> = {
     },
     "grok-build-0.1": {
         default: "grok-build-0.1",
+    },
+    "kimi-k3": {
+        default: "kimi-k3-max",
+        low: "kimi-k3-low",
+        high: "kimi-k3-high",
+        max: "kimi-k3-max",
     },
 };
 

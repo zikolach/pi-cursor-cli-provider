@@ -12,7 +12,14 @@ export interface CursorModelDef {
 /** Explicit `-thinking` variants are always reasoning-capable. */
 const THINKING_VARIANT_RE = /-thinking(?:-|$)/;
 
-const REASONING_LEVELS = ["minimal", "low", "medium", "high", "xhigh"] as const satisfies readonly ThinkingLevel[];
+const REASONING_LEVELS = [
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+] as const satisfies readonly ThinkingLevel[];
 
 /**
  * Static fallback list. Used when `agent models` fails or times out, and as
@@ -779,6 +786,7 @@ interface ModelVariants {
     medium?: string;
     high?: string;
     xhigh?: string;
+    max?: string;
 }
 
 function opusThinkingVariants(version: "4-7" | "4-8"): ModelVariants {
@@ -790,6 +798,7 @@ function opusThinkingVariants(version: "4-7" | "4-8"): ModelVariants {
         medium: `${prefix}-thinking-medium`,
         high: `${prefix}-thinking-high`,
         xhigh: `${prefix}-thinking-xhigh`,
+        max: `${prefix}-thinking-max`,
     };
 }
 

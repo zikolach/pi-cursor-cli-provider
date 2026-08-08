@@ -21,6 +21,7 @@ import type {
     Context,
     ImageContent,
     Model,
+    OAuthCredentials,
     SimpleStreamOptions,
     TextContent,
 } from "@earendil-works/pi-ai";
@@ -54,6 +55,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const CURSOR_SESSION_ENTRY_TYPE = "cursor-cli-session";
+const CURSOR_CLI_PLACEHOLDER_API_KEY = "cursor-cli";
 
 interface CursorSessionEntryData {
     cursorSessionId: string | null;
@@ -69,6 +71,29 @@ interface CursorSessionState {
 interface PromptTempFiles {
     dir: string | null;
     imageCount: number;
+}
+
+/**
+ * Cursor authentication belongs to the CLI, so credentials stored by Pi are
+ * never used. Pi gives stored credentials precedence over configured auth; an
+ * old OAuth entry for this provider would otherwise hide every Cursor model.
+ */
+function createCursorCliOAuthCompatibility() {
+    return {
+        name: "Cursor CLI",
+        async login(): Promise<OAuthCredentials> {
+            throw new Error("Authenticate with Cursor using `agent login`");
+        },
+        async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
+            return {
+                ...credentials,
+                expires: Number.MAX_SAFE_INTEGER,
+            };
+        },
+        getApiKey(): string {
+            return CURSOR_CLI_PLACEHOLDER_API_KEY;
+        },
+    };
 }
 
 const MIME_TYPE_TO_EXTENSION: Record<string, string> = {
@@ -579,7 +604,8 @@ export default async function (pi: ExtensionAPI) {
         // A literal non-empty value is required here so pi considers the provider
         // authenticated and shows its models. The value is never sent over the wire
         // because this provider uses a custom streamSimple implementation.
-        apiKey: "cursor-cli",
+        apiKey: CURSOR_CLI_PLACEHOLDER_API_KEY,
+        oauth: createCursorCliOAuthCompatibility(),
         api: "cursor-cli" as Api,
         models: toProviderModels(modelDefs),
         streamSimple: createStreamCursorCli(cursorSessionState),

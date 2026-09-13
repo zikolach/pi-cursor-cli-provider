@@ -1348,16 +1348,165 @@ for (const model of STATIC_MODELS) {
 
 const STATIC_MODELS_MAP = new Map<string, CursorModelDef>(STATIC_MODELS.map((m) => [m.id, m]));
 
-/**
- * Convert a Cursor CLI model ID to its canonical ID.
- * Returns null for variant-only IDs (e.g. thinking); they are not shown as separate models.
- * Returns the id as-is for unmapped models.
- */
-function toCanonicalId(cursorId: string): string | null {
+interface DiscoveredVariant {
+    model: CursorModelDef;
+    familyId: string;
+    level?: ThinkingLevel;
+    noReasoning: boolean;
+    thinking: boolean;
+    variant: boolean;
+}
+
+let discoveredModelMap = new Map<string, ModelVariants>();
+let discoveredCursorToCanonical = new Map<string, string | null>();
+let discoveredThinkingLevelMaps = new Map<string, ThinkingLevelMap>();
+
+function parseDiscoveredVariant(model: CursorModelDef): DiscoveredVariant {
+    const fastSuffix = model.id.endsWith("-fast") ? "-fast" : "";
+    const coreId = fastSuffix ? model.id.slice(0, -fastSuffix.length) : model.id;
+    const levelPattern = "extra-high|minimal|low|medium|high|xhigh|max|none";
+    const patterns = [
+        { re: new RegExp(`^(.+?)-thinking-(${levelPattern})$`), thinking: true },
+        { re: new RegExp(`^(.+?)-(${levelPattern})-thinking$`), thinking: true },
+        { re: new RegExp(`^(.+?)-(${levelPattern})$`), thinking: false },
+    ];
+
+    for (const { re, thinking } of patterns) {
+        const match = re.exec(coreId);
+        if (!match) continue;
+        const rawLevel = match[2];
+        return {
+            model,
+            familyId: `${match[1]}${fastSuffix}`,
+            level: rawLevel === "none" ? undefined : rawLevel === "extra-high" ? "xhigh" : (rawLevel as ThinkingLevel),
+            noReasoning: rawLevel === "none",
+            thinking,
+            variant: true,
+        };
+    }
+
+    if (coreId.endsWith("-thinking")) {
+        return {
+            model,
+            familyId: `${coreId.slice(0, -"-thinking".length)}${fastSuffix}`,
+            noReasoning: false,
+            thinking: true,
+            variant: true,
+        };
+    }
+
+    return {
+        model,
+        familyId: model.id,
+        noReasoning: false,
+        thinking: false,
+        variant: false,
+    };
+}
+
+function nameIncludesLevel(name: string, variant: DiscoveredVariant): boolean {
+    if (variant.noReasoning) return /\bnone\b/i.test(name);
+    if (!variant.level) return false;
+    if (variant.level === "xhigh") return /\b(?:xhigh|extra[ -]high)\b/i.test(name);
+    return new RegExp(`\\b${variant.level}\\b`, "i").test(name);
+}
+
+function pickDefaultVariant(variants: DiscoveredVariant[]): DiscoveredVariant {
+    const exact = variants.find((variant) => !variant.variant);
+    if (exact) return exact;
+
+    const implicitDefault = variants.find(
+        (variant) => !variant.thinking && !nameIncludesLevel(variant.model.name, variant),
+    );
+    if (implicitDefault) return implicitDefault;
+
+    const defaultOrder: (ThinkingLevel | "none")[] = ["medium", "high", "xhigh", "max", "low", "minimal", "none"];
+    for (const level of defaultOrder) {
+        const match = variants.find(
+            (variant) =>
+                !variant.thinking &&
+                (level === "none" ? variant.noReasoning : !variant.noReasoning && variant.level === level),
+        );
+        if (match) return match;
+    }
+
+    return variants[0];
+}
+
+function toLegacyCanonicalId(cursorId: string): string | null {
     const canonical = cursorDefaultToCanonical.get(cursorId);
     if (canonical) return canonical;
     if (allMappedCursorIds.has(cursorId)) return null;
     return cursorId;
+}
+
+function configureDiscoveredModels(defs: CursorModelDef[]): void {
+    const families = new Map<string, DiscoveredVariant[]>();
+    for (const model of defs) {
+        const variant = parseDiscoveredVariant(model);
+        const family = families.get(variant.familyId) ?? [];
+        family.push(variant);
+        families.set(variant.familyId, family);
+    }
+
+    const modelMap = new Map<string, ModelVariants>();
+    const cursorToCanonical = new Map<string, string | null>();
+    const thinkingLevelMaps = new Map<string, ThinkingLevelMap>();
+
+    for (const [familyId, variants] of families) {
+        const defaultVariant = pickDefaultVariant(variants);
+        const legacyCanonicalId = toLegacyCanonicalId(defaultVariant.model.id);
+        const canonicalId =
+            legacyCanonicalId && legacyCanonicalId !== defaultVariant.model.id ? legacyCanonicalId : familyId;
+        const family: ModelVariants = { default: defaultVariant.model.id };
+        const thinkingVariants = variants.filter((variant) => variant.thinking);
+        const onlyThinkingVariant = thinkingVariants.length === 1 ? thinkingVariants[0] : undefined;
+        const genericThinking =
+            thinkingVariants.find((variant) => !variant.level) ??
+            (onlyThinkingVariant?.level &&
+            variants.some(
+                (variant) => !variant.thinking && !variant.noReasoning && variant.level === onlyThinkingVariant.level,
+            )
+                ? onlyThinkingVariant
+                : undefined);
+
+        for (const level of REASONING_LEVELS) {
+            const candidates = variants.filter((variant) => variant.level === level);
+            const selected = candidates.find((variant) => variant.thinking) ?? candidates[0] ?? genericThinking;
+            if (selected) family[level] = selected.model.id;
+        }
+        if (!family.minimal && family.low) family.minimal = family.low;
+
+        modelMap.set(canonicalId, family);
+        for (const variant of variants) cursorToCanonical.set(variant.model.id, null);
+        cursorToCanonical.set(defaultVariant.model.id, canonicalId);
+
+        const thinkingLevelMap: ThinkingLevelMap = {};
+        let hasReasoning = false;
+        for (const level of REASONING_LEVELS) {
+            if (family[level]) {
+                thinkingLevelMap[level] = level;
+                hasReasoning = true;
+            } else {
+                thinkingLevelMap[level] = null;
+            }
+        }
+        if (hasReasoning) thinkingLevelMaps.set(canonicalId, thinkingLevelMap);
+    }
+
+    discoveredModelMap = modelMap;
+    discoveredCursorToCanonical = cursorToCanonical;
+    discoveredThinkingLevelMaps = thinkingLevelMaps;
+}
+
+/**
+ * Convert a Cursor CLI model ID to its canonical ID.
+ * Returns null for discovered or legacy variant-only IDs; they are not shown as separate models.
+ * Returns the ID as-is for unmapped models.
+ */
+function toCanonicalId(cursorId: string): string | null {
+    if (discoveredCursorToCanonical.has(cursorId)) return discoveredCursorToCanonical.get(cursorId) ?? null;
+    return toLegacyCanonicalId(cursorId);
 }
 
 /**
@@ -1365,7 +1514,7 @@ function toCanonicalId(cursorId: string): string | null {
  * Returns the id as-is for unmapped models.
  */
 export function toCursorId(canonicalId: string, reasoning?: string): string {
-    const family = MODEL_MAP[canonicalId];
+    const family = discoveredModelMap.get(canonicalId) ?? MODEL_MAP[canonicalId];
     if (!family) return canonicalId;
     const level =
         reasoning && (REASONING_LEVELS as readonly string[]).includes(reasoning)
@@ -1376,7 +1525,13 @@ export function toCursorId(canonicalId: string, reasoning?: string): string {
 }
 
 function hasReasoningVariants(canonicalId: string): boolean {
+    if (discoveredModelMap.has(canonicalId)) return discoveredThinkingLevelMaps.has(canonicalId);
     return canonicalThinkingLevelMaps.has(canonicalId);
+}
+
+function getThinkingLevelMap(canonicalId: string): ThinkingLevelMap | undefined {
+    if (discoveredModelMap.has(canonicalId)) return discoveredThinkingLevelMaps.get(canonicalId);
+    return canonicalThinkingLevelMaps.get(canonicalId);
 }
 
 const DISCOVERY_TIMEOUT_MS = 15_000;
@@ -1470,9 +1625,11 @@ export function runAgentModels(agentPath: string): Promise<CursorModelDef[]> {
 
 /**
  * Build a ProviderModelConfig array from a list of CursorModelDef entries.
- * Uses canonical IDs where a mapping exists and omits variant-only entries.
+ * Infers reasoning families from model ID suffixes, uses canonical IDs, and
+ * omits the individual variant entries.
  */
 export function toProviderModels(defs: CursorModelDef[]) {
+    configureDiscoveredModels(defs);
     const seen = new Set<string>();
     return defs.flatMap((m) => {
         const canonicalId = toCanonicalId(m.id);
@@ -1480,7 +1637,7 @@ export function toProviderModels(defs: CursorModelDef[]) {
         const id = canonicalId !== m.id ? canonicalId : m.id;
         if (seen.has(id)) return [];
         seen.add(id);
-        const thinkingLevelMap = canonicalThinkingLevelMaps.get(id);
+        const thinkingLevelMap = getThinkingLevelMap(id);
         return [
             {
                 id,

@@ -33,6 +33,7 @@
         "@earendil-works/pi-coding-agent": "*"
     },
     "scripts": {
+        "test": "tsx --test test/*.test.ts",
         "lint": "npx biome check",
         "format": "npx biome check --write",
         "typecheck": "npx tsc --noEmit"
@@ -41,6 +42,7 @@
         "@biomejs/biome": "^2.5.7",
         "@earendil-works/pi-ai": "0.84.1",
         "@earendil-works/pi-coding-agent": "0.84.1",
+        "tsx": "^4.20.6",
         "typescript": "^7.0.2"
     },
     "repository": {

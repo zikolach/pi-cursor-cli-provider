@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Automatically group newly discovered Cursor model variants and expose their available reasoning levels in Pi.
+
 ## [0.10.1]
 
 ### Fixed
